@@ -45,7 +45,6 @@ import numpy
 import tangent
 from tangent import tracing
 
-
 # Means that a keyword argument will be filled in by the default of the actual
 # function
 DEFAULT = object()
@@ -85,11 +84,14 @@ def get_module_functions(modules):
 
 
 def create_register(dict_):
+
   def register(key):
     def _(f):
       dict_[key] = f
       return f
+
     return _
+
   return register
 
 
@@ -100,6 +102,7 @@ primal = create_register(primals)
 # Functions: f => f, df
 @adjoint(gast.FunctionDef)
 def dfunction_def(adjoint_body, return_dx):
+
   def df():
     adjoint_body
     return_dx
@@ -177,8 +180,8 @@ def add(z, x, y):
 
 @adjoint(gast.Pow)
 def pow(z, x, y):
-  d[x] = y * x ** (y - 1) * d[z]
-  d[y] = numpy.log(x) * x ** y * d[z]
+  d[x] = y * x**(y - 1) * d[z]
+  d[y] = numpy.log(x) * x**y * d[z]
 
 
 @adjoint(gast.Sub)
@@ -258,9 +261,9 @@ def multiply(z, x, y):
 @adjoint(numpy.dot)
 def dot(y, x1, x2):
   d[x1] = tangent.grad_dot(d[y], x1, x2)
-  d[x2] = numpy.transpose(tangent.grad_dot(numpy.transpose(d[y]),
-                                           numpy.transpose(x2),
-                                           numpy.transpose(x1)))
+  d[x2] = numpy.transpose(
+      tangent.grad_dot(
+          numpy.transpose(d[y]), numpy.transpose(x2), numpy.transpose(x1)))
 
 
 @adjoint(numpy.reshape)
@@ -275,21 +278,22 @@ def transpose(y, x):
 
 @adjoint(numpy.broadcast_arrays)
 def broadcast_arrays(ys, *args):
-  d[args] = tuple(tangent.unbroadcast_to(dy, numpy.shape(arg))
-                  for arg, dy in zip(args, d[ys]))
+  d[args] = tuple(
+      tangent.unbroadcast_to(dy, numpy.shape(arg))
+      for arg, dy in zip(args, d[ys]))
 
 
 @adjoint(numpy.sum)
 def sum(y, x, axis=DEFAULT, dtype=DEFAULT, keepdims=DEFAULT):
-  d[x] = tangent.astype(tangent.unreduce(d[y], numpy.shape(x),
-                                         axis, keepdims), x)
+  d[x] = tangent.astype(
+      tangent.unreduce(d[y], numpy.shape(x), axis, keepdims), x)
 
 
 @adjoint(numpy.mean)
 def mean(y, x, axis=DEFAULT, dtype=DEFAULT, keepdims=DEFAULT):
   n = tangent.astype(tangent.array_size(x, axis), x)
-  d[x] = tangent.astype(tangent.unreduce(d[y], numpy.shape(x),
-                                         axis, keepdims), x) / n
+  d[x] = tangent.astype(
+      tangent.unreduce(d[y], numpy.shape(x), axis, keepdims), x) / n
 
 
 @adjoint(numpy.maximum)
@@ -297,9 +301,20 @@ def maximum(ans, x, y):
   d[x] = d[ans] * tangent.balanced_eq(x, ans, y)
   d[y] = d[ans] * tangent.balanced_eq(y, ans, x)
 
+
 @adjoint(numpy.array)
-def aarray(ans,x):
-  d[x] = tangent.astype(d[ans],x)
+def aarray(ans, x):
+  d[x] = tangent.astype(d[ans], x)
+
+
+@adjoint(numpy.linalg.det)
+def adet(z, x):
+  """d|A|/dA_{ij} = adj(A).T
+
+  See  Jacobi's formula: https://en.wikipedia.org/wiki/Jacobi%27s_formula
+  """
+  adjugate = np.linalg.det(x) * np.linalg.pinv(x)
+  d[x] = adjugate.T
 
 
 #
@@ -351,6 +366,7 @@ def apop_stack(z, stack, op_id):
 @adjoint(tangent.copy)
 def acopy(z, x):
   d[x] = tangent.copy(d[z])
+
 
 #
 # Tracing primitives
